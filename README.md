@@ -1,5 +1,8 @@
 # WS Shutdown
 
+[![go.dev reference](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white&style=flat-square)](https://pkg.go.dev/github.com/mheck136/ws-shutdown)
+[![Go Report Card](https://goreportcard.com/badge/github.com/mheck136/ws-shutdown)](https://goreportcard.com/report/github.com/mheck136/ws-shutdown)
+
 `Server.Shutdown(context.Context)` of the `http` package of the Go standard library does not take hijacked connections
 into account. Websocket implementations like [gorilla/websocket](https://github.com/gorilla/websocket) do use connection
 hijacking to upgrade HTTP/1 connections to websocket connections.
