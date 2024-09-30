@@ -12,51 +12,16 @@ import (
 // connection, but only monitors that all http.Handler's wrapped with Middleware have returned. That means that if a
 // hijacked connection continues to be used after the http.Handler has returned, Shutdowner will consider that
 // connection as inactive and won't prevent the application shutdown from proceeding.
-//
-// Use NewShutdowner() to create a valid instance of Shutdowner
 type Shutdowner struct {
-	lock              sync.Mutex
-	closed            chan struct{}
-	shutdownRequested bool
-	activeConnections int
-}
-
-// NewShutdowner creates a new instance of Shutdowner
-func NewShutdowner() *Shutdowner {
-	s := Shutdowner{
-		closed: make(chan struct{}),
-	}
-	return &s
-}
-
-func (g *Shutdowner) addActiveConnection() bool {
-	g.lock.Lock()
-	defer g.lock.Unlock()
-	if g.shutdownRequested {
-		return false
-	}
-	g.activeConnections++
-	return true
-}
-
-func (g *Shutdowner) removeActiveConnection() {
-	g.lock.Lock()
-	defer g.lock.Unlock()
-	g.activeConnections--
-	if g.shutdownRequested && g.activeConnections == 0 {
-		close(g.closed)
-	}
+	wg sync.WaitGroup
 }
 
 // Middleware wraps the invocation of the given handler so that Shutdown can be used to ensure that all handlers have
 // returned.
 func (g *Shutdowner) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !g.addActiveConnection() {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			return
-		}
-		defer g.removeActiveConnection()
+		g.wg.Add(1)
+		defer g.wg.Done()
 		next.ServeHTTP(w, r)
 	})
 }
@@ -64,14 +29,13 @@ func (g *Shutdowner) Middleware(next http.Handler) http.Handler {
 // Shutdown waits for all active handlers to finish. If the context is cancelled before all handlers finish, the
 // function returns the context error. If all handlers finish before the context is cancelled, the function returns nil.
 func (g *Shutdowner) Shutdown(ctx context.Context) error {
-	g.lock.Lock()
-	g.shutdownRequested = true
-	if g.activeConnections == 0 {
-		close(g.closed)
-	}
-	g.lock.Unlock()
+	d := make(chan struct{})
+	go func() {
+		g.wg.Wait()
+		close(d)
+	}()
 	select {
-	case <-g.closed:
+	case <-d:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
