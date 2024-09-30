@@ -14,7 +14,7 @@ func BenchmarkNewGracefulShutdown(b *testing.B) {
 	w := httptest.NewRecorder()
 	var counter int
 
-	shutdowner := shutdown.NewShutdowner()
+	var shutdowner shutdown.Shutdowner
 
 	handler := shutdowner.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { counter++ }))
 

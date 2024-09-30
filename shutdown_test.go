@@ -19,7 +19,7 @@ func ExampleShutdowner() {
 	ctx := context.Background()
 
 	// a single instance per application should be enough
-	shutdowner := shutdown.NewShutdowner()
+	var shutdowner shutdown.Shutdowner
 
 	// handler that hijacks connections, e.g. for websockets
 	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -133,7 +133,7 @@ func TestShutdowner(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			shutdowner := shutdown.NewShutdowner()
+			var shutdowner shutdown.Shutdowner
 
 			for _, d := range tc.durations {
 				handler, started := newSleepingHandler(d)
