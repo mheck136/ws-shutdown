@@ -36,55 +36,55 @@ corresponding `http.Handler` returns.
 
 ## Example usage
 ```Go
-	ctx := context.Background()
+ctx := context.Background()
 
-	// a single instance per application should be enough
-	var shutdowner shutdown.Shutdowner
+// a single instance per application should be enough
+var shutdowner shutdown.Shutdowner
 
-	// handler that hijacks connections, e.g. for websockets
-	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// here, the hijacking of the connection would happen, e.g. upgrading to a websocket connection
-		w.WriteHeader(http.StatusOK)
-	})
+// handler that hijacks connections, e.g. for websockets
+var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// here, the hijacking of the connection would happen, e.g. upgrading to a websocket connection
+	w.WriteHeader(http.StatusOK)
+})
 
-	// wrap the handler with the shutdowner middleware
-	handler = shutdowner.Middleware(handler)
+// wrap the handler with the shutdowner middleware
+handler = shutdowner.Middleware(handler)
 
-	server := http.Server{
-		Addr:    ":8080",
-		Handler: handler,
+server := http.Server{
+	Addr:    ":8080",
+	Handler: handler,
+}
+
+// start the server
+go func() {
+	err := server.ListenAndServe()
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Printf("server reported an error: %v", err)
 	}
+}()
 
-	// start the server
-	go func() {
-		err := server.ListenAndServe()
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("server reported an error: %v", err)
-		}
-	}()
+// wait for the interrupt signal
+signalCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
+defer cancel()
 
-	// wait for the interrupt signal
-	signalCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
-	defer cancel()
+// simulate signal
+go func() {
+	time.Sleep(1 * time.Second)
+	_ = syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+}()
 
-	// simulate signal
-	go func() {
-		time.Sleep(1 * time.Second)
-		_ = syscall.Kill(syscall.Getpid(), syscall.SIGINT)
-	}()
+<-signalCtx.Done()
 
-	<-signalCtx.Done()
+// set a timeout for the shutdown
+shutdownCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+defer cancel()
 
-	// set a timeout for the shutdown
-	shutdownCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
+// shutdown the server gracefully
+err := shutdowner.ShutdownWithServer(shutdownCtx, &server)
+if err != nil {
+	log.Printf("graceful server shutdown failed: %v", err)
+	return
+}
 
-	// shutdown the server gracefully
-	err := shutdowner.ShutdownWithServer(shutdownCtx, &server)
-	if err != nil {
-		log.Printf("graceful server shutdown failed: %v", err)
-		return
-	}
-
-	log.Println("server shutdown gracefully")
+log.Println("server shutdown gracefully")
 ```
